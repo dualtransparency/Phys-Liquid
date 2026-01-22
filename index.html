@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phys-Liquid: A Physics-Informed Dataset</title>
+    <meta name="description" content="A Physics-Informed Dataset for Estimating 3D Geometry and Volume of Transparent Deformable Liquids">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@700;900&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            /* Colors extracted from the poster visual style */
+            --primary-bg: #f3f0ff; /* Light Lavender */
+            --accent-purple: #6a1b9a; /* Deep Purple from HUST/AAAI logo */
+            --glass-border: rgba(255, 255, 255, 0.4);
+            --glass-bg: rgba(255, 255, 255, 0.65);
+            --text-main: #1a1a1a;
+            --text-secondary: #4a4a4a;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--primary-bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* --- PHYSICS BACKGROUND (Canvas) --- */
+        #fluid-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.6;
+        }
+
+        /* --- LAYOUT UTILITIES --- */
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .section {
+            margin-bottom: 60px;
+            padding-top: 20px;
+        }
+
+        /* --- GLASSMORPHISM CARDS --- */
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.12);
+        }
+
+        /* --- HEADER & LIQUID TITLE --- */
+        header {
+            text-align: center;
+            padding: 80px 0 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* The Apple Liquid Text Effect */
+        .liquid-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 5rem;
+            font-weight: 900;
+            position: relative;
+            color: transparent;
+            background-clip: text;
+            -webkit-background-clip: text;
+            background-image: linear-gradient(135deg, #a8c0ff, #3f2b96);
+            filter: drop-shadow(0px 2px 0px rgba(255,255,255,0.5));
+            letter-spacing: -2px;
+            margin-bottom: 10px;
+        }
+
+        /* SVG Filter applied via class for the distortion */
+        .liquid-filter-target {
+            filter: url(#liquid-filter);
+        }
+
+        .subtitle {
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            font-weight: 300;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* --- AUTHORS --- */
+        .authors {
+            font-size: 1.1rem;
+            color: var(--accent-purple);
+            margin-bottom: 20px;
+        }
+
+        .authors a {
+            text-decoration: none;
+            color: var(--accent-purple);
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+        .authors a:hover { color: #8e24aa; }
+
+        .affiliations {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        
+        .superscript { font-size: 0.7em; vertical-align: super; }
+
+        /* --- ACTION BUTTONS --- */
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 50px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 12px 24px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-purple), #8e24aa);
+            color: white;
+            box-shadow: 0 4px 15px rgba(106, 27, 154, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.7);
+            color: var(--text-main);
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(106, 27, 154, 0.4);
+        }
+        
+        .btn i { margin-right: 8px; }
+
+        /* --- CONTENT STYLES --- */
+        h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2rem;
+            color: var(--text-main);
+            margin-top: 0;
+            border-bottom: 2px solid rgba(106, 27, 154, 0.1);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        p {
+            line-height: 1.7;
+            font-size: 1.05rem;
+            color: #333;
+            text-align: justify;
+        }
+
+        .figure-container {
+            width: 100%;
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .figure-container img {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .caption {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #666;
+            font-style: italic;
+        }
+
+        /* --- HIGHLIGHTS GRID --- */
+        .highlights {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .highlight-item {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255,255,255,0.5);
+            border-radius: 15px;
+            border: 1px solid rgba(255,255,255,0.6);
+        }
+        
+        .highlight-number {
+            display: block;
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--accent-purple);
+        }
+
+        .highlight-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* --- CITATION BLOCK --- */
+        code {
+            display: block;
+            background: #f4f4f4;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px;
+            font-size: 0.9rem;
+            color: #777;
+        }
+
+        /* Responsive tweaks */
+        @media (max-width: 768px) {
+            .liquid-title { font-size: 3.5rem; }
+            .glass-card { padding: 25px; }
+        }
+    </style>
+</head>
+<body>
+
+    <svg style="display: none;">
+        <defs>
+            <filter id="liquid-filter">
+                <feTurbulence baseFrequency="0.01 0.02" numOctaves="3" result="noise" seed="1"/>
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="10" />
+            </filter>
+        </defs>
+    </svg>
+
+    <canvas id="fluid-canvas"></canvas>
+
+    <div class="container">
+        
+        <header>
+            <div style="margin-bottom: 20px;">
+                <span style="color: #003366; font-weight:bold;">AAAI 2026</span> <span style="color: #6a1b9a;">| Oral Presentation</span>
+            </div>
+            
+            <h1 class="liquid-title liquid-filter-target">Phys-Liquid</h1>
+            
+            <div class="subtitle">
+                A Physics-Informed Dataset for Estimating 3D Geometry and Volume of Transparent Deformable Liquids
+            </div>
+
+            <div class="authors">
+                <a href="#">Ke Ma</a><sup>1</sup>, 
+                <a href="#">Yizhou Fang</a><sup>2</sup>, 
+                <a href="#">Jean-Baptiste Weibel</a><sup>3</sup>, 
+                <a href="#">Shuai Tan</a><sup>4</sup>, 
+                <a href="#">Xinggang Wang</a><sup>1</sup>, 
+                <a href="#">Yang Xiao</a><sup>1</sup>, 
+                <a href="#">Yi Fang</a><sup>7,8</sup>, 
+                <a href="#">Tian Xia</a><sup>2*</sup>
+            </div>
+
+            <div class="affiliations">
+                <sup>1</sup>Huazhong University of Science and Technology, 
+                <sup>2</sup>School of Software and Engineering HUST,<br>
+                <sup>3</sup>BOKU University, 
+                <sup>4</sup>Shanghai Jiao Tong University, 
+                <sup>7</sup>NYU Abu Dhabi, 
+                <sup>8</sup>New York University
+            </div>
+
+            <div class="btn-group">
+                <a href="https://arxiv.org/abs/2511.11077" class="btn btn-primary">
+                    <i class="fas fa-file-pdf"></i> Paper (arXiv)
+                </a>
+                <a href="https://github.com/dualtransparency/Phys-Liquid" class="btn btn-secondary">
+                    <i class="fab fa-github"></i> Code & Data
+                </a>
+                <a href="#video" class="btn btn-secondary">
+                    <i class="fas fa-play-circle"></i> Video
+                </a>
+            </div>
+        </header>
+
+        <div class="figure-container">
+            <img src="banner.png" alt="Phys-Liquid Banner" style="border-radius: 20px; max-height: 600px; object-fit: cover; width: 100%;">
+        </div>
+
+        <section class="section">
+            <div class="glass-card">
+                <h2>Abstract</h2>
+                <p>
+                    Estimating the geometric and volumetric properties of transparent deformable liquids is challenging due to optical complexities and dynamic surface deformations induced by container movements. Autonomous robots performing precise liquid manipulation tasks must handle containers in ways that inevitably induce these deformations.
+                </p>
+                <p>
+                    We introduce <strong>Phys-Liquid</strong>, a physics-informed dataset comprising <strong>97,200 simulation images</strong> and corresponding 3D meshes, capturing liquid dynamics across multiple laboratory scenes, lighting conditions, liquid colors, and container rotations. We also propose a four-stage reconstruction pipeline to validate the dataset's utility. Experimental results demonstrate improved accuracy in reconstructing liquid geometry and volume, outperforming existing benchmarks.
+                </p>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="glass-card">
+                <h2>Dataset Overview</h2>
+                <p>
+                    Phys-Liquid systematically simulates liquid deformation governed by the Navier-Stokes equations, providing paired visual observations with accurate geometric supervision.
+                </p>
+                
+                <div class="figure-container">
+                    <img src="figure1.png" alt="Dataset Overview showing different containers and simulation sets">
+                    <div class="caption">Figure 1: Simulation samples showing variations in laboratory scenes, lighting, rotation, and liquid properties.</div>
+                </div>
+
+                <div class="highlights">
+                    <div class="highlight-item">
+                        <span class="highlight-number">97k+</span>
+                        <span class="highlight-label">Simulation Images</span>
+                    </div>
+                    <div class="highlight-item">
+                        <span class="highlight-number">20</span>
+                        <span class="highlight-label">Lab Containers</span>
+                    </div>
+                    <div class="highlight-item">
+                        <span class="highlight-number">81</span>
+                        <span class="highlight-label">Temporal Frames/Seq</span>
+                    </div>
+                    <div class="highlight-item">
+                        <span class="highlight-number">4D</span>
+                        <span class="highlight-label">Spatiotemporal Data</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="glass-card">
+                <h2>Reconstruction Pipeline</h2>
+                <p>
+                    We validate the dataset with a four-stage pipeline: (1) Liquid Segmentation using SAM2 and YOLO-World, (2) Multi-view Mask Generation via diffusion models, (3) 3D Mesh Reconstruction using Triplane methods, and (4) Real-world Scaling.
+                </p>
+                <div class="figure-container">
+                    <img src="figure7.png" alt="Four-stage reconstruction pipeline">
+                    <div class="caption">Figure 7: Overview of our four-step pipeline for reconstructing and scaling 3D meshes of deformable liquids.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="glass-card">
+                <h2>Results</h2>
+                <p>
+                    Our method, fine-tuned on Phys-Liquid, produces higher-fidelity geometry compared to baselines like InstantMesh and TripoSR, capturing precise morphological features of liquid deformation.
+                </p>
+                <div class="figure-container">
+                    <img src="figure8.png" alt="Qualitative comparison results">
+                    <div class="caption">Figure 8: Qualitative comparison of reconstructed meshes by baseline methods and our pipeline.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="glass-card">
+                <h2>Citation</h2>
+                <p>If you find this dataset or code useful in your research, please cite our paper:</p>
+                <pre><code>@inproceedings{ma2026physliquid,
+  title={Phys-Liquid: A Physics-Informed Dataset for Estimating 3D Geometry and Volume of Transparent Deformable Liquids},
+  author={Ma, Ke and Fang, Yizhou and Weibel, Jean-Baptiste and Tan, Shuai and Wang, Xinggang and Xiao, Yang and Fang, Yi and Xia, Tian},
+  booktitle={Proceedings of the AAAI Conference on Artificial Intelligence},
+  year={2026}
+}</code></pre>
+            </div>
+        </section>
+
+        <footer>
+            <p>
+                Huazhong University of Science and Technology | AAAI 2026<br>
+                Contact: <a href="mailto:make@hust.edu.cn">make@hust.edu.cn</a>
+            </p>
+        </footer>
+
+    </div>
+
+    <script>
+        /**
+         * PHYSICS-INFORMED BACKGROUND ANIMATION
+         * Simulates floating liquid particles using a simple physics model.
+         * Particles react gently to mouse position, symbolizing fluid dynamics.
+         */
+        const canvas = document.getElementById('fluid-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let particles = [];
+        const particleCount = 60;
+        
+        // Mouse state
+        let mouse = { x: null, y: null };
+
+        window.addEventListener('resize', resize);
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * 1;
+                this.vy = (Math.random() - 0.5) * 1;
+                this.size = Math.random() * 20 + 5; // Variation in size like mesh particles
+                this.color = `rgba(${100 + Math.random()*100}, ${100 + Math.random()*50}, 255, ${Math.random() * 0.1})`; // Blue/Purple tint
+            }
+
+            update() {
+                // Basic movement
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Mouse interaction (Physics-informed repulsive force)
+                if (mouse.x != null) {
+                    let dx = mouse.x - this.x;
+                    let dy = mouse.y - this.y;
+                    let distance = Math.sqrt(dx*dx + dy*dy);
+                    let maxDist = 200;
+
+                    if (distance < maxDist) {
+                        const forceDirectionX = dx / distance;
+                        const forceDirectionY = dy / distance;
+                        const force = (maxDist - distance) / maxDist;
+                        const directionX = forceDirectionX * force * 2; 
+                        const directionY = forceDirectionY * force * 2;
+
+                        this.vx -= directionX * 0.05;
+                        this.vy -= directionY * 0.05;
+                    }
+                }
+
+                // Boundary check
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        function init() {
+            resize();
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle());
+            }
+            animate();
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+            requestAnimationFrame(animate);
+        }
+
+        init();
+    </script>
+</body>
+</html>
